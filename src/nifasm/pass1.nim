@@ -83,6 +83,8 @@ proc handleArch*(n: var Cursor; ctx: var GenContext) =
   let arch = n.strVal
   if arch == "x64":
     ctx.arch = Arch.X64
+  elif arch == "illumos_x64":
+    ctx.arch = Arch.IllumosX64
   elif arch == "linux_arm64":
     ctx.arch = Arch.LinuxA64
   elif arch == "arm64":
@@ -100,7 +102,7 @@ proc handleArch*(n: var Cursor; ctx: var GenContext) =
   else:
     error("Unknown architecture: " & arch, n)
   setAsmWordSize(case ctx.arch
-                 of Arch.X64, Arch.LinuxA64, Arch.A64, Arch.WinX64, Arch.WinA64: 8
+                 of Arch.X64, Arch.IllumosX64, Arch.LinuxA64, Arch.A64, Arch.WinX64, Arch.WinA64: 8
                  of Arch.CortexM, Arch.Rv32: 4
                  of Arch.Avr: 2)
   inc n

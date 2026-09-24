@@ -29,7 +29,7 @@ import x64/encoder as x86
 import arm64/encoder as arm64
 from image/elf32 as elf32 import nil
 import image / [dwarf, tracetable]
-import image / [writecommon, writeelf, writemacho, writepe, writecortexm, writeavr, writerv32]
+import image / [writecommon, writeelf, writedynamicelf, writemacho, writepe, writecortexm, writeavr, writerv32]
 import pass1, pass2
 
 include compat2   # getOrQuit on host Nim
@@ -344,6 +344,7 @@ proc setupTlsWin(ctx: var GenContext) =
   ctx.bssOffset += TlsIndexCellBytes
 
 proc assemble*(filename, outfile: string; symMap = false; emitObj = false;
+               shared = false; soname = "";
                listing = ""; debugInfo = true;
                memMap = elf32.defaultMemoryMap()) =
   var buf = parseFromFile(filename, sharedTags = asmTags)
@@ -466,9 +467,18 @@ proc assemble*(filename, outfile: string; symMap = false; emitObj = false;
   var n = beginRead(ctx.modules.getOrQuit(MainModuleName).buf)
   pass2(n, ctx)
 
-  # Process all pending symbols (both main module and foreign modules)
-  # This generates code only for symbols that were actually referenced (dead code elimination)
+  # Process all pending symbols (both main module and foreign modules).
   processReachableSymbols(ctx)
+  if shared and ctx.arch in {Arch.X64, Arch.IllumosX64}:
+    # A DSO has no entry point: exported definitions are roots, not just those
+    # reachable from main. Until export visibility is explicit, expose all procs
+    # and writable globals (including their initializer dependencies).
+    var roots: seq[Symbol] = @[]
+    for _, sym in ctx.rootScope.syms:
+      if sym.kind in {skProc, skGvar} and sym.name notin ctx.generatedSymbols:
+        roots.add sym
+    for sym in roots: generateSymbol(ctx, sym)
+    processReachableSymbols(ctx)
 
   # Now that every bundled tvar has an FS offset, reserve the unified TLS block and
   # synthesize the per-target entry stub: the FS base (x86-64), zeroed arguments
@@ -480,6 +490,10 @@ proc assemble*(filename, outfile: string; symMap = false; emitObj = false;
   setupWinEntry(ctx)
   setupLinuxA64Entry(ctx)
 
+  if shared and ctx.arch notin {Arch.X64, Arch.IllumosX64}:
+    quit "nifasm: --shared requires (arch x64) or (arch illumos_x64)"
+  if ctx.arch == Arch.IllumosX64 and not shared:
+    quit "nifasm: illumos executable output not implemented yet; use --shared"
   if ctx.emitObj:
     # Relocatable object for the system linker (foreign `.o` / framework linking).
     # Standalone executable emission below is unaffected.
@@ -494,7 +508,17 @@ proc assemble*(filename, outfile: string; symMap = false; emitObj = false;
     # there is impossible and ignoring them silently is worse than saying so.
     if memMap.given and ctx.arch != Arch.CortexM:
       quit "nifasm: the memory-map flags apply to the cortex_m target only"
+    if shared:
+      try:
+        let profile = if ctx.arch == Arch.IllumosX64: IllumosElf else: LinuxElf
+        writeDynamicElfShared(ctx, outfile,
+          if soname.len > 0: soname else: outfile.extractFilename, profile)
+      except ValueError as e:
+        quit "nifasm: " & e.msg
+      return
     case ctx.arch
+    of Arch.IllumosX64:
+      quit "nifasm: illumos executable output not implemented yet; use --shared"
     of Arch.X64, Arch.LinuxA64:
       try:
         writeElf(ctx, outfile)

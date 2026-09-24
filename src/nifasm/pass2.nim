@@ -409,7 +409,7 @@ proc genInst(n: var Cursor; ctx: var GenContext) =
   ## `withListingRow` is a template, so the three selectors stay independent of
   ## each other and of this dispatcher.
   case ctx.arch
-  of Arch.X64, Arch.WinX64:
+  of Arch.X64, Arch.IllumosX64, Arch.WinX64:
     genInstNodeX64(n, ctx)
   of Arch.A64, Arch.WinA64, Arch.LinuxA64:
     genInstNodeA64(n, ctx)

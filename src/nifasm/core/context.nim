@@ -70,6 +70,7 @@ type
 
   Arch* = enum
     X64        # Linux x86-64 (ELF)
+    IllumosX64 # illumos x86-64 (dynamic ELF)
     LinuxA64   # Linux ARM64 (ELF)
     A64        # macOS ARM64 (Mach-O)
     WinX64     # Windows x86-64 (PE)

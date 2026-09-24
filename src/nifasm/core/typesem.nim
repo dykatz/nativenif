@@ -346,7 +346,7 @@ proc resolveForeignSym(ctx: var GenContext; modname, fullName: string; scope: Sc
     # and the real offset into later ones — a size field then aliases what a pointer
     # field should be. (macOS/A64 relocates tvars through descriptors and allocates
     # lazily in `generateSymbol`, so leave that path untouched.)
-    if ctx.arch in {Arch.X64, Arch.WinX64} and
+    if ctx.arch in {Arch.X64, Arch.IllumosX64, Arch.WinX64} and
        result.name notin ctx.generatedSymbols:
       allocTlsSlotX64(ctx, result, declStartCur)
       ctx.generatedSymbols.incl result.name

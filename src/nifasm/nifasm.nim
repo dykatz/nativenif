@@ -14,6 +14,9 @@ Usage:
 
 Options:
   --output:file, -o:file    specify output file name (default: file)
+  --shared                   emit a Linux/amd64 or illumos/amd64 ELF shared object
+                             (import-free subset: local code and writable globals)
+  --soname:NAME              shared object's DT_SONAME (default: output basename)
   --emit-obj, -c            emit a relocatable object (.o) for the system linker
                             instead of a standalone executable (macOS arm64 only)
   --symmap                  dump each generated proc's virtual address to stderr
@@ -54,6 +57,8 @@ proc handleCmdLine() =
   var outfile = ""
   var symMap = false
   var emitObj = false
+  var shared = false
+  var soname = ""
   var listing = ""
   var debugInfo = true
   var memMap = defaultMemoryMap()
@@ -101,6 +106,8 @@ proc handleCmdLine() =
       case key.normalize
       of "output", "o": outfile = val
       of "emit-obj", "emitobj", "c": emitObj = true
+      of "shared": shared = true
+      of "soname": soname = val
       of "symmap": symMap = true
       of "listing": listing = val
       of "no-debug-info", "nodebuginfo": debugInfo = false
@@ -122,11 +129,14 @@ proc handleCmdLine() =
   let bad = validate(memMap)
   if bad.len > 0: quit "nifasm: " & bad
 
+  if shared and emitObj: quit "nifasm: --shared and --emit-obj are mutually exclusive"
+  if soname.len > 0 and not shared: quit "nifasm: --soname requires --shared"
   if filename.len == 0: quit(Usage, QuitSuccess)
   if outfile.len == 0:
     outfile = filename.changeFileExt(if emitObj: "o" else: "")
 
-  assemble(filename, outfile, symMap = symMap, emitObj = emitObj, listing = listing,
+  assemble(filename, outfile, symMap = symMap, emitObj = emitObj,
+           shared = shared, soname = soname, listing = listing,
            debugInfo = debugInfo, memMap = memMap)
 
 when isMainModule:
