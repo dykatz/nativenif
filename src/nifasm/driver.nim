@@ -345,6 +345,7 @@ proc setupTlsWin(ctx: var GenContext) =
 
 proc assemble*(filename, outfile: string; symMap = false; emitObj = false;
                shared = false; soname = ""; initProc = ""; finiProc = "";
+               exports: seq[string] = @[];
                listing = ""; debugInfo = true;
                memMap = elf32.defaultMemoryMap()) =
   var buf = parseFromFile(filename, sharedTags = asmTags)
@@ -470,12 +471,24 @@ proc assemble*(filename, outfile: string; symMap = false; emitObj = false;
   # Process all pending symbols (both main module and foreign modules).
   processReachableSymbols(ctx)
   if shared and ctx.arch in {Arch.X64, Arch.IllumosX64}:
-    # A DSO has no entry point: exported definitions are roots, not just those
-    # reachable from main. Until export visibility is explicit, expose all procs
-    # and writable globals (including their initializer dependencies).
+    # Exported definitions and lifecycle hooks are roots, not merely those
+    # reached from an executable's entry point. No --export means the legacy
+    # export-all policy; an explicit list keeps unreferenced helpers private.
+    for name in exports:
+      let sym = ctx.rootScope.lookup(ctx.symIdOf(name))
+      if sym == nil or sym.kind notin {skProc, skGvar} or sym == ctx.tlsBlockSym:
+        quit "nifasm: --export names no proc/global: " & name
+    for name in [initProc, finiProc]:
+      if name.len > 0:
+        let sym = ctx.rootScope.lookup(ctx.symIdOf(name))
+        if sym == nil or sym.kind != skProc:
+          quit "nifasm: init/fini names no proc: " & name
     var roots: seq[Symbol] = @[]
     for _, sym in ctx.rootScope.syms:
-      if sym.kind in {skProc, skGvar} and sym.name notin ctx.generatedSymbols:
+      if sym.kind in {skProc, skGvar} and sym.name notin ctx.generatedSymbols and
+         sym != ctx.tlsBlockSym and
+         (exports.len == 0 or ctx.nameOf(sym.name) in exports or
+          ctx.nameOf(sym.name) == initProc or ctx.nameOf(sym.name) == finiProc):
         roots.add sym
     for sym in roots: generateSymbol(ctx, sym)
     processReachableSymbols(ctx)
@@ -513,7 +526,7 @@ proc assemble*(filename, outfile: string; symMap = false; emitObj = false;
         let profile = if ctx.arch == Arch.IllumosX64: IllumosElf else: LinuxElf
         writeDynamicElfShared(ctx, outfile,
           if soname.len > 0: soname else: outfile.extractFilename,
-          profile, initProc, finiProc)
+          profile, initProc, finiProc, exports)
       except ValueError as e:
         quit "nifasm: " & e.msg
       return

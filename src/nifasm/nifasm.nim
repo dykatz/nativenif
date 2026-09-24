@@ -17,6 +17,7 @@ Options:
   --shared                   emit a Linux/amd64 or illumos/amd64 ELF shared object
                              (local code/data and external function imports)
   --soname:NAME              shared object's DT_SONAME (default: output basename)
+  --export:NAME              export only named proc/global (repeatable; default: all)
   --init-proc:NAME           void(void) proc run on shared-object load
   --fini-proc:NAME           void(void) proc run on shared-object unload
   --emit-obj, -c            emit a relocatable object (.o) for the system linker
@@ -62,6 +63,7 @@ proc handleCmdLine() =
   var shared = false
   var soname = ""
   var initProc, finiProc = ""
+  var exports: seq[string] = @[]
   var listing = ""
   var debugInfo = true
   var memMap = defaultMemoryMap()
@@ -111,6 +113,10 @@ proc handleCmdLine() =
       of "emit-obj", "emitobj", "c": emitObj = true
       of "shared": shared = true
       of "soname": soname = val
+      of "export":
+        if val.len == 0: quit "nifasm: --export requires a symbol name"
+        if val in exports: quit "nifasm: duplicate --export:" & val
+        exports.add val
       of "init-proc", "initproc":
         if val.len == 0: quit "nifasm: --init-proc requires a proc name"
         initProc = val
@@ -139,15 +145,15 @@ proc handleCmdLine() =
   if bad.len > 0: quit "nifasm: " & bad
 
   if shared and emitObj: quit "nifasm: --shared and --emit-obj are mutually exclusive"
-  if (soname.len > 0 or initProc.len > 0 or finiProc.len > 0) and not shared:
-    quit "nifasm: --soname/--init-proc/--fini-proc require --shared"
+  if (soname.len > 0 or exports.len > 0 or initProc.len > 0 or finiProc.len > 0) and not shared:
+    quit "nifasm: --soname/--export/--init-proc/--fini-proc require --shared"
   if filename.len == 0: quit(Usage, QuitSuccess)
   if outfile.len == 0:
     outfile = filename.changeFileExt(if emitObj: "o" else: "")
 
   assemble(filename, outfile, symMap = symMap, emitObj = emitObj,
            shared = shared, soname = soname, initProc = initProc,
-           finiProc = finiProc, listing = listing,
+           finiProc = finiProc, exports = exports, listing = listing,
            debugInfo = debugInfo, memMap = memMap)
 
 when isMainModule:

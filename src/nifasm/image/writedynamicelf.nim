@@ -28,8 +28,18 @@ proc putBytes(f: Stream; bytes: openArray[byte]) =
 proc padTo(f: Stream; pos: int) =
   while f.getPosition() < pos: f.write 0'u8
 
+proc findLifecyclePos(a: var GenContext; labels: Table[int, int]; name: string): int =
+  if name.len == 0: return -1
+  for id, sym in a.rootScope.syms:
+    if a.nameOf(id) == name and sym.kind == skProc and labels.hasKey(sym.offset) and
+       sym.typ != nil and sym.typ.kind == ProcT and
+       sym.typ.params.len == 0 and sym.typ.results.len == 0:
+      return labels[sym.offset]
+  raise newException(ValueError, "dynamic ELF shared: init/fini requires a defined void(void) proc: " & name)
+
 proc writeDynamicElfShared*(a: var GenContext; outfile, soname: string;
-                            profile: DynamicElfProfile; initProc = ""; finiProc = "") =
+                            profile: DynamicElfProfile; initProc = ""; finiProc = "";
+                            publicNames: seq[string] = @[]) =
   if profile.pageSize < 4096 or (profile.pageSize and (profile.pageSize - 1)) != 0:
     raise newException(ValueError, "dynamic ELF: page size must be a power of two >= 4096")
   if a.arch notin {Arch.X64, Arch.IllumosX64}:
@@ -53,18 +63,18 @@ proc writeDynamicElfShared*(a: var GenContext; outfile, soname: string;
   for id, sym in a.rootScope.syms:
     if (sym.kind == skProc and labels.hasKey(sym.offset)) or
        (sym.kind == skGvar and sym.offset >= 0 and sym != a.tlsBlockSym):
-      exports.add (a.nameOf(id), sym)
+      let name = a.nameOf(id)
+      if publicNames.len == 0 or name in publicNames:
+        exports.add (name, sym)
   exports.sort(proc(x, y: (string, Symbol)): int = cmp(x[0], y[0]))
-  proc lifecyclePos(name: string): int =
-    if name.len == 0: return -1
-    for (exportName, sym) in exports:
-      if exportName == name and sym.kind == skProc and
-         sym.typ != nil and sym.typ.kind == ProcT and
-         sym.typ.params.len == 0 and sym.typ.results.len == 0:
-        return labels[sym.offset]
-    raise newException(ValueError, "dynamic ELF shared: init/fini requires a defined void(void) proc: " & name)
-  let initPos = lifecyclePos(initProc)
-  let finiPos = lifecyclePos(finiProc)
+  for name in publicNames:
+    var found = false
+    for (exportName, _) in exports:
+      if exportName == name: found = true; break
+    if not found:
+      raise newException(ValueError, "dynamic ELF shared: export was not generated: " & name)
+  let initPos = findLifecyclePos(a, labels, initProc)
+  let finiPos = findLifecyclePos(a, labels, finiProc)
   const hdrSize = 64 + 56 * 3   # RX LOAD, RW LOAD, DYNAMIC
   let codeOff = hdrSize
   let codeEnd = codeOff + a.buf.data.len
