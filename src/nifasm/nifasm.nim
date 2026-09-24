@@ -15,8 +15,10 @@ Usage:
 Options:
   --output:file, -o:file    specify output file name (default: file)
   --shared                   emit a Linux/amd64 or illumos/amd64 ELF shared object
-                             (import-free subset: local code and writable globals)
+                             (local code/data and external function imports)
   --soname:NAME              shared object's DT_SONAME (default: output basename)
+  --init-proc:NAME           void(void) proc run on shared-object load
+  --fini-proc:NAME           void(void) proc run on shared-object unload
   --emit-obj, -c            emit a relocatable object (.o) for the system linker
                             instead of a standalone executable (macOS arm64 only)
   --symmap                  dump each generated proc's virtual address to stderr
@@ -59,6 +61,7 @@ proc handleCmdLine() =
   var emitObj = false
   var shared = false
   var soname = ""
+  var initProc, finiProc = ""
   var listing = ""
   var debugInfo = true
   var memMap = defaultMemoryMap()
@@ -108,6 +111,12 @@ proc handleCmdLine() =
       of "emit-obj", "emitobj", "c": emitObj = true
       of "shared": shared = true
       of "soname": soname = val
+      of "init-proc", "initproc":
+        if val.len == 0: quit "nifasm: --init-proc requires a proc name"
+        initProc = val
+      of "fini-proc", "finiproc":
+        if val.len == 0: quit "nifasm: --fini-proc requires a proc name"
+        finiProc = val
       of "symmap": symMap = true
       of "listing": listing = val
       of "no-debug-info", "nodebuginfo": debugInfo = false
@@ -130,13 +139,15 @@ proc handleCmdLine() =
   if bad.len > 0: quit "nifasm: " & bad
 
   if shared and emitObj: quit "nifasm: --shared and --emit-obj are mutually exclusive"
-  if soname.len > 0 and not shared: quit "nifasm: --soname requires --shared"
+  if (soname.len > 0 or initProc.len > 0 or finiProc.len > 0) and not shared:
+    quit "nifasm: --soname/--init-proc/--fini-proc require --shared"
   if filename.len == 0: quit(Usage, QuitSuccess)
   if outfile.len == 0:
     outfile = filename.changeFileExt(if emitObj: "o" else: "")
 
   assemble(filename, outfile, symMap = symMap, emitObj = emitObj,
-           shared = shared, soname = soname, listing = listing,
+           shared = shared, soname = soname, initProc = initProc,
+           finiProc = finiProc, listing = listing,
            debugInfo = debugInfo, memMap = memMap)
 
 when isMainModule:

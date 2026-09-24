@@ -133,6 +133,8 @@ proc extprocLib*(ctx: var GenContext; n: var Cursor): int =
   else:
     result = ctx.importOrdinal(
       if ctx.arch in {Arch.WinX64, Arch.WinA64}: WindowsKernelDll
+      elif ctx.arch == Arch.IllumosX64: "libc.so.1"
+      elif ctx.arch == Arch.X64: "libc.so.6"
       else: "/usr/lib/libSystem.B.dylib")
 
 proc openForeignModule*(ctx: var GenContext; modname: string; n: Cursor) =

@@ -344,7 +344,7 @@ proc setupTlsWin(ctx: var GenContext) =
   ctx.bssOffset += TlsIndexCellBytes
 
 proc assemble*(filename, outfile: string; symMap = false; emitObj = false;
-               shared = false; soname = "";
+               shared = false; soname = ""; initProc = ""; finiProc = "";
                listing = ""; debugInfo = true;
                memMap = elf32.defaultMemoryMap()) =
   var buf = parseFromFile(filename, sharedTags = asmTags)
@@ -512,7 +512,8 @@ proc assemble*(filename, outfile: string; symMap = false; emitObj = false;
       try:
         let profile = if ctx.arch == Arch.IllumosX64: IllumosElf else: LinuxElf
         writeDynamicElfShared(ctx, outfile,
-          if soname.len > 0: soname else: outfile.extractFilename, profile)
+          if soname.len > 0: soname else: outfile.extractFilename,
+          profile, initProc, finiProc)
       except ValueError as e:
         quit "nifasm: " & e.msg
       return
