@@ -92,6 +92,7 @@ type
                              ## this proc handles. The name is the target's to read —
                              ## `machine_cortexm.interruptSlot` turns it into a slot in the
                              ## interrupt table — and it is empty for an ordinary proc.
+    exportName*: string      ## C symbol requested by Leng's `(exportc "...")` pragma
     isNaked*: bool           ## `(naked)`: emit NO prologue and NO epilogue. The proc
                              ## does not touch SP, so on entry SP still points at the
                              ## return address — which is the only way a routine can
@@ -901,7 +902,8 @@ proc collect*(buf: var TokenBuf; inputPath: string; tags: TagPool;
                                                 # `stdcall` proctype already sets.
                                                 foreignAbi: isWin64AbiProc(result, procStart))
           result.procs.add ProcInfo(asmName: asmN, decl: procStart, isEntry: entry,
-                                    isAsm: asmProc, isNaked: nakedProc, irqName: irqN)
+                                    isAsm: asmProc, isNaked: nakedProc, irqName: irqN,
+                                    exportName: exportcN)
       else:
         skip c
   # Emit the entry proc first so it begins the text section.

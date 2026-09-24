@@ -269,6 +269,7 @@ type
                         # symbol's type. Reset per proc.
     # Dynamic linking
     imports*: seq[ImportedLib]  # Imported libraries
+    linkExports*: seq[tuple[internal: SymId, publicName: string]] # (export S "C-name")
     extProcs*: seq[ExtProcInfo]  # External procs to bind
     gotSlotCount*: int  # Number of GOT slots allocated
     # Module system / dead code elimination

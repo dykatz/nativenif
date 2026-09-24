@@ -591,6 +591,7 @@ type
     RodataD = (ord(RodataTagId), "rodata")  ## read-only data (string/bytes)
     GvarD = (ord(GvarTagId), "gvar")  ## global variable
     TvarD = (ord(TvarTagId), "tvar")  ## thread local variable. ONE tag, two readings, because both say the same thing at different scales: as a declaration it is one thread-local, and inside a Cortex-M `(stacks …)` it is the bytes reserved for ALL of them at the top of every stack slot, just below where SP starts. On x86-64 every module's thread-locals share one block reached through FS, and **offset 0 of that block is reserved**: it holds the block's own address (`arkham.tls.self.0`). x86-64 can load through FS but cannot `lea` against it, so `&threadvar` is compiled as `FS:[0] + offset` — the same slot, and the same reason, as the psABI's TCB pointer. Whoever creates a thread fills it; the entry stub fills the main thread's
+    ExportD = (ord(ExportTagId), "export")  ## publish the defined proc/global S under C-name in a shared library; an export is a link root even when never called locally
     ImpD = (ord(ImpTagId), "imp")  ## import dynamic library
     ExtprocD = (ord(ExtprocTagId), "extproc")  ## external proc from imported library
     SyprocD = (ord(SyprocTagId), "syproc")  ## system-call proc declaration (proctype + clobbers + number)
@@ -598,7 +599,7 @@ type
     LenientD = (ord(LenientTagId), "lenient")  ## proc pragma (after the clobber section): the body is MACHINE-PORTED code (e.g. distilled from gcc), so the structural disciplines are off for this one proc — backward jumps to labels are allowed (no `(loop)` required), registers may be used raw even when bound (params, r11), a bare `(call P)`/`(jmp P)` to a proc needs no `(prepare)`, and the type/clobber checks are skipped. The checks exist to catch code-GENERATOR bugs; ported code was already correct on the machine it came from
 
 proc rawTagIsNifasmDecl*(raw: TagEnum): bool {.inline.} =
-  raw in {TypeTagId, ProcTagId, ParamsTagId, ParamTagId, ResultTagId, ClobberTagId, VarTagId, LayoutTagId, FlashTagId, SramTagId, StacksTagId, HeapTagId, NoinitTagId, CoreTagId, InterruptsTagId, IrqTagId, ArchTagId, CfvarTagId, RodataTagId, GvarTagId, TvarTagId, ImpTagId, ExtprocTagId, SyprocTagId, RegsTagId, LenientTagId}
+  raw in {TypeTagId, ProcTagId, ParamsTagId, ParamTagId, ResultTagId, ClobberTagId, VarTagId, LayoutTagId, FlashTagId, SramTagId, StacksTagId, HeapTagId, NoinitTagId, CoreTagId, InterruptsTagId, IrqTagId, ArchTagId, CfvarTagId, RodataTagId, GvarTagId, TvarTagId, ExportTagId, ImpTagId, ExtprocTagId, SyprocTagId, RegsTagId, LenientTagId}
 
 type
   NifasmExpr* = enum

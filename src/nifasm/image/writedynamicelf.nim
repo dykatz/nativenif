@@ -3,7 +3,8 @@
 # profile; symbol/hash/layout construction is common to Linux and illumos.
 # Unsupported relocation/storage classes are rejected, never emitted as a
 # library which only happens to load at one address or corrupts libc's TLS.
-import std / [streams, os, tables, algorithm]
+import std / [streams, os, tables, algorithm, sets]
+import nifcore
 import ../core / [context, relocs, sem, buffers]
 import elf, dynamicelf
 
@@ -60,19 +61,38 @@ proc writeDynamicElfShared*(a: var GenContext; outfile, soname: string;
   var labels = initTable[int, int]()
   for l in a.buf.labels: labels[int(l.id)] = l.position
   var exports: seq[(string, Symbol)] = @[]
+  var markedInternals = initHashSet[SymId]()
+  var markedPublic = initHashSet[string]()
+  for entry in a.linkExports:
+    if entry.internal in markedInternals or entry.publicName in markedPublic:
+      raise newException(ValueError, "dynamic ELF shared: duplicate (export) declaration")
+    markedInternals.incl entry.internal
+    markedPublic.incl entry.publicName
   for id, sym in a.rootScope.syms:
     if (sym.kind == skProc and labels.hasKey(sym.offset)) or
        (sym.kind == skGvar and sym.offset >= 0 and sym != a.tlsBlockSym):
-      let name = a.nameOf(id)
-      if publicNames.len == 0 or name in publicNames:
-        exports.add (name, sym)
+      let internal = a.nameOf(id)
+      if publicNames.len > 0:
+        if internal in publicNames: exports.add (internal, sym)
+      elif a.linkExports.len > 0:
+        for entry in a.linkExports:
+          if entry.internal == id: exports.add (entry.publicName, sym); break
+      else:
+        exports.add (internal, sym)
   exports.sort(proc(x, y: (string, Symbol)): int = cmp(x[0], y[0]))
   for name in publicNames:
     var found = false
-    for (exportName, _) in exports:
-      if exportName == name: found = true; break
+    for (_, sym) in exports:
+      if a.nameOf(sym.name) == name: found = true; break
     if not found:
       raise newException(ValueError, "dynamic ELF shared: export was not generated: " & name)
+  if publicNames.len == 0:
+    for entry in a.linkExports:
+      var found = false
+      for (_, sym) in exports:
+        if sym.name == entry.internal: found = true; break
+      if not found:
+        raise newException(ValueError, "dynamic ELF shared: marked export was not generated: " & a.nameOf(entry.internal))
   let initPos = findLifecyclePos(a, labels, initProc)
   let finiPos = findLifecyclePos(a, labels, finiProc)
   const hdrSize = 64 + 56 * 3   # RX LOAD, RW LOAD, DYNAMIC

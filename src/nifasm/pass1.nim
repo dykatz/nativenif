@@ -185,6 +185,20 @@ proc pass1*(n: var Cursor; scope: Scope; ctx: var GenContext; moduleName: string
           skip n
         of ArchD:
           handleArch(n, ctx)
+        of ExportD:
+          # Link root and optional public alias are recorded before reachability.
+          # Resolve against the complete pass-1 scope after all declarations.
+          inc n
+          if n.kind notin {Symbol, Ident}: error("Expected export symbol", n)
+          let internal = ctx.symIdOf(if n.kind == Symbol: getSym(n) else: n.strVal)
+          inc n
+          if n.kind != StrLit: error("Expected C export name string", n)
+          let publicName = getStr(n)
+          if publicName.len == 0 or '\0' in publicName:
+            error("Invalid C export name", n)
+          ctx.linkExports.add (internal: internal, publicName: publicName)
+          n = start
+          skip n
         of ImpD:
           # (imp "libpath")
           inc n

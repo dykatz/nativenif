@@ -474,6 +474,10 @@ proc assemble*(filename, outfile: string; symMap = false; emitObj = false;
     # Exported definitions and lifecycle hooks are roots, not merely those
     # reached from an executable's entry point. No --export means the legacy
     # export-all policy; an explicit list keeps unreferenced helpers private.
+    for entry in ctx.linkExports:
+      let sym = ctx.rootScope.lookup(entry.internal)
+      if sym == nil or sym.kind notin {skProc, skGvar} or sym == ctx.tlsBlockSym:
+        quit "nifasm: (export) names no proc/global: " & ctx.nameOf(entry.internal)
     for name in exports:
       let sym = ctx.rootScope.lookup(ctx.symIdOf(name))
       if sym == nil or sym.kind notin {skProc, skGvar} or sym == ctx.tlsBlockSym:
@@ -485,9 +489,14 @@ proc assemble*(filename, outfile: string; symMap = false; emitObj = false;
           quit "nifasm: init/fini names no proc: " & name
     var roots: seq[Symbol] = @[]
     for _, sym in ctx.rootScope.syms:
+      var marked = false
+      if exports.len == 0:
+        for entry in ctx.linkExports:
+          if entry.internal == sym.name: marked = true; break
       if sym.kind in {skProc, skGvar} and sym.name notin ctx.generatedSymbols and
          sym != ctx.tlsBlockSym and
-         (exports.len == 0 or ctx.nameOf(sym.name) in exports or
+         ((exports.len == 0 and ctx.linkExports.len == 0) or
+          ctx.nameOf(sym.name) in exports or marked or
           ctx.nameOf(sym.name) == initProc or ctx.nameOf(sym.name) == finiProc):
         roots.add sym
     for sym in roots: generateSymbol(ctx, sym)

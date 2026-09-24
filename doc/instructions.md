@@ -331,6 +331,7 @@ a second table anywhere in this file is parsed as vocabulary.)
 | `(rodata L S)`         | NifasmDecl                  | read-only data (string/bytes) |
 | `(gvar D L T)`         | NifasmDecl                  | global variable |
 | `(tvar D L T)`; `(tvar SIZE)` | NifasmDecl, NifasmExpr | thread local variable. ONE tag, two readings, because both say the same thing at different scales: as a declaration it is one thread-local, and inside a Cortex-M `(stacks …)` it is the bytes reserved for ALL of them at the top of every stack slot, just below where SP starts. On x86-64 every module's thread-locals share one block reached through FS, and **offset 0 of that block is reserved**: it holds the block's own address (`arkham.tls.self.0`). x86-64 can load through FS but cannot `lea` against it, so `&threadvar` is compiled as `FS:[0] + offset` — the same slot, and the same reason, as the psABI's TCB pointer. Whoever creates a thread fills it; the entry stub fills the main thread's |
+| `(export S "C-name")`  | NifasmDecl                  | publish the defined proc/global S under C-name in a shared library; an export is a link root even when never called locally |
 | `(imp S)`              | NifasmDecl                  | import dynamic library |
 | `(extproc D S)`        | NifasmDecl                  | external proc from imported library |
 | `(syproc D ...)`       | NifasmDecl                  | system-call proc declaration (proctype + clobbers + number) |

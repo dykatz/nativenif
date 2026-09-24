@@ -473,7 +473,7 @@ proc pass2*(n: Cursor; ctx: var GenContext) =
           handleLayout(n, ctx)
         of InterruptsD:
           handleInterrupts(n, ctx)
-        of ImpD, ExtprocD, SyprocD:
+        of ExportD, ImpD, ExtprocD, SyprocD:
           # Already handled in pass1, skip. A syproc emits no code: it is a
           # syscall's proctype + number, consulted by the `(syscall)`/`(svc)` marker.
           skip n

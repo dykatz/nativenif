@@ -243,6 +243,23 @@ may carry `(params …) (result …) (clobber …)` after the external name, and
 call sites bind `(arg name)` / `(res name)` and are checked exactly like calls to a
 proc in the image.
 
+### Shared-library exports
+
+A top-level `(export symbol "publicName")` publishes an existing proc or writable
+global under `publicName` in the dynamic symbol table. It also makes that
+definition a link root even if nothing in the module calls it. The declaration
+can precede the definition. The internal symbol retains its asm-NIF name for
+calls and references; only the external name changes. Arkham emits this marker
+from Leng's `exportc` pragma on x64 procs and mutable globals.
+
+With `nifasm --shared` on Linux/amd64 or illumos/amd64, any export declarations
+restrict the public symbol set to the named definitions. If none are present,
+all generated procs and writable globals are exported for compatibility. A
+repeatable `--export:NAME` flag overrides the declarations and publishes the
+specified internal names without aliases. Other output formats ignore export
+metadata. See [internals/dynamicelf.md](internals/dynamicelf.md) for the
+supported shared-library subset and remaining limitations.
+
 ### Stack arguments with `(csize)`
 
 When a proc has stack parameters, the caller must explicitly manage the stack. The `(csize)` builtin computes the total stack space required for the current call's stack arguments (analogous to `(ssize)` for function entry points).

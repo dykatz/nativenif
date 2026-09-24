@@ -238,6 +238,13 @@ proc genGlobal*(g: var CodeGen; nifName: SymId; decl: Cursor) =
   let isConst = c.stmtKind == ConstS
   c.into:                                       # (gvar SymbolDef VarPragmas Type Value?)
     inc c                                       # name
+    var importName, exportName: string
+    var pragmaCur = c
+    parsePragmas(pragmaCur, importName, exportName)
+    if not g.prog.windows and exportName.len > 0 and not isConst:
+      g.ab.tree ExportD:
+        g.ab.sym name
+        g.ab.str exportName
     skip c                                      # pragmas
     let typeCur = c
     skip c                                      # type
@@ -333,6 +340,10 @@ proc generateX64*(buf: var TokenBuf; inputPath: string; tags: TagPool;
       g.emitSyproc(sp)
     for i in 0 ..< g.prog.procs.len:
       let info = g.prog.procs[i]
+      if not windows and info.exportName.len > 0:
+        g.ab.tree ExportD:
+          g.ab.sym info.asmName
+          g.ab.str info.exportName
       genProc(g, info)
     for i in 0 ..< g.variadicExterns.len:  # the variadic call shapes the bodies used
       let v = g.variadicExterns[i]

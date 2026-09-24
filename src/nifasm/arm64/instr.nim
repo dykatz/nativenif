@@ -566,7 +566,7 @@ proc genInstA64(n: var Cursor; ctx: var GenContext) =
   of NoDecl:
     discard "handle via `case instTag`"
   of TypeD, ProcD, ParamsD, ParamD, ResultD, ClobberD, LenientD,
-     ArchD, RodataD, GvarD, TvarD, ImpD, ExtprocD, SyprocD, RegsD,
+     ArchD, RodataD, GvarD, TvarD, ExportD, ImpD, ExtprocD, SyprocD, RegsD,
      InterruptsD, IrqD, LayoutD, FlashD, SramD, StacksD, HeapD,
      NoinitD, CoreD:
     raiseAssert("Unhandled declaration tag: " & $declTag)
