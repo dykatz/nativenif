@@ -249,7 +249,11 @@ A top-level `(export symbol "publicName")` publishes an existing proc or writabl
 global under `publicName` in the dynamic symbol table. It also makes that
 definition a link root even if nothing in the module calls it. The declaration
 can precede the definition. The internal symbol retains its asm-NIF name for
-calls and references; only the external name changes. Arkham emits this marker
+calls and references; only the external name changes. Export declarations in
+foreign modules linked by a reference (or by an export of their symbol) are
+also collected as roots without eagerly generating their other declarations.
+The linker follows exports transitively through linked modules; it does not
+search unrelated files on disk. Arkham emits this marker
 from Leng's `exportc` pragma on x64 procs and mutable globals.
 
 With `nifasm --shared` on Linux/amd64 or illumos/amd64, any export declarations

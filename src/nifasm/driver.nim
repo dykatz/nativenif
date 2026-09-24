@@ -20,7 +20,7 @@
 ## they are built after every real proc has been emitted.
 
 import std / [tables, sets, os, syncio]
-import nifcore, nifcoreparse, nifmodules
+import nifcore, nifcoreparse, nifmodules, bif
 import "../../../nimony/src/lib" / [nifreader]
 import core / [context, sem, cursors, typesem, modules, 
                tags, model, tagconv, decls, tagpool, stackslots, relocs,
@@ -343,6 +343,62 @@ proc setupTlsWin(ctx: var GenContext) =
   ctx.winTlsIndexSym.size = ctx.bssOffset
   ctx.bssOffset += TlsIndexCellBytes
 
+proc scanForeignExportCursor(ctx: var GenContext; input: Cursor; path: string) =
+  var n = input
+  if n.kind != TagLit or n.tag != StmtsTagId: return
+  loopInto n:
+    if n.kind == TagLit and tagToNifasmDecl(n.tag) == ExportD:
+      var marker = n
+      inc marker
+      if marker.kind notin {Symbol, Ident}:
+        quit "nifasm: foreign (export) needs a symbol in " & path
+      let internal = ctx.symIdOf(if marker.kind == Symbol: getSym(marker) else: marker.strVal)
+      inc marker
+      if marker.kind != StrLit:
+        quit "nifasm: foreign (export) needs a public name in " & path
+      let publicName = getStr(marker)
+      if publicName.len == 0 or '\0' in publicName:
+        quit "nifasm: foreign (export) has invalid public name in " & path
+      ctx.linkExports.add (internal: internal, publicName: publicName)
+    skip n
+
+proc collectForeignExports(ctx: var GenContext; modname: string) =
+  ## A foreign module's index contains definitions, not top-level export
+  ## markers. Scan only linked modules when building a DSO; codegen stays lazy.
+  let asmnif = ctx.baseDir / modname & ".asm.nif"
+  let path = if fileExists(asmnif): asmnif else: ctx.baseDir / modname & ".nif"
+  let m = ctx.modules.getOrQuit(modname)
+  if m.foreign != nil and m.foreign.isBif:
+    # The binary module has its own tag/pool ids. Re-intern before decoding
+    # ExportD or comparing symbol ids against the main scope.
+    var bm = bif.loadInto(path, ctx.pool, asmTags)
+    scanForeignExportCursor(ctx, beginRead(bm.buf), path)
+  else:
+    var buf = parseFromFile(path, sharedPool = ctx.pool, sharedTags = asmTags)
+    scanForeignExportCursor(ctx, beginRead(buf), path)
+
+proc discoverForeignExports(ctx: var GenContext) =
+  ## An export may refer to a definition in ANOTHER module and pull it in; that
+  ## module may have exports of its own. Iterate until no new module is linked.
+  var scanned = initHashSet[string]()
+  var imported = 0
+  let reference = beginRead(ctx.modules.getOrQuit(MainModuleName).buf)
+  while true:
+    var fresh: seq[string] = @[]
+    for name in ctx.modules.keys:
+      if name != MainModuleName and name notin scanned: fresh.add name
+    if fresh.len == 0 and imported == ctx.linkExports.len: break
+    for name in fresh:
+      scanned.incl name
+      collectForeignExports(ctx, name)
+    let count = ctx.linkExports.len
+    for i in imported ..< count:
+      let entry = ctx.linkExports[i]
+      discard lookupWithAutoImport(ctx, ctx.rootScope,
+                                   ctx.nameOf(entry.internal), reference)
+    imported = count
+    processReachableSymbols(ctx)
+
 proc assemble*(filename, outfile: string; symMap = false; emitObj = false;
                shared = false; soname = ""; initProc = ""; finiProc = "";
                exports: seq[string] = @[];
@@ -471,6 +527,15 @@ proc assemble*(filename, outfile: string; symMap = false; emitObj = false;
   # Process all pending symbols (both main module and foreign modules).
   processReachableSymbols(ctx)
   if shared and ctx.arch in {Arch.X64, Arch.IllumosX64}:
+    if exports.len == 0:
+      discoverForeignExports(ctx)
+    else:
+      # Command-line selection overrides asm-NIF export metadata. Resolve its
+      # explicit foreign names on demand, without scanning other modules.
+      let reference = beginRead(ctx.modules.getOrQuit(MainModuleName).buf)
+      for name in exports:
+        discard lookupWithAutoImport(ctx, ctx.rootScope, name, reference)
+      processReachableSymbols(ctx)
     # Exported definitions and lifecycle hooks are roots, not merely those
     # reached from an executable's entry point. No --export means the legacy
     # export-all policy; an explicit list keeps unreferenced helpers private.
